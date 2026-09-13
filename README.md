@@ -1,6 +1,6 @@
 # Avatar orders from upload to receipt
 
-Spin up the service, then shoot the checkout and avatar in one multipart request. Infrai keeps the image steps behind one API and a single `INFRAI_API_KEY`; I usually just use plain HTTP from a notebook, so there's no image SDK to pip install.
+Boot the service, then push the checkout and avatar in a single multipart request. Infrai keeps the image pipeline behind one API and a single `INFRAI_API_KEY`. We use plain HTTP here, so you skip installing a heavy image SDK and can just run the eval.
 
 ```bash
 python -m venv .venv
@@ -12,7 +12,7 @@ python scripts/run_avatar_service.py
 
 ## Send an avatar order
 
-The request sets the order name, customer, payment decision, crop aspect, and source file. The service uploads the image, asks for a square smart crop, compresses that output, then records the observable order decision.
+Your request passes the order ID, customer details, payment state, crop aspect ratio, and the source file. The service uploads the image, asks for a square smart crop, compresses the output, and finally records the observable order decision.
 
 ```bash
 curl --request POST http://127.0.0.1:8000/avatar-orders \
@@ -23,23 +23,23 @@ curl --request POST http://127.0.0.1:8000/avatar-orders \
   --form aspect=1:1
 ```
 
-For a paid checkout whose avatar finishes, the expected result carries `fulfillment: "fulfilled"`, `receipt_ready: true`, a customer update, and the optimized avatar data from Infrai. An unpaid checkout stays pending even when its avatar is ready, which keeps token cost predictable.
+When a paid checkout finishes processing its avatar, the expected response includes `fulfillment: "fulfilled"`, `receipt_ready: true`, a customer update, and the optimized avatar data returned by Infrai. If the checkout is unpaid, the order stays pending even after the avatar is fully ready.
 
-The client tags every write with an idempotency key. It decodes `{ok, data, error, metadata}` before reading HTTP status, forwards normal 4xx to the API caller, and backs off on 429. One ordering trap: calling `raise_for_status()` before parsing the envelope hides the useful rejection info.
+Ensure the client sets an idempotency key for every write operation. It needs to decode `{ok, data, error, metadata}` before checking the HTTP status. We want to preserve standard 4xx rejections for the caller and back off cleanly on HTTP 429. Be careful with execution order here. Calling `raise_for_status()` before you read the response envelope will hide useful rejection details.
 
 ## Verify the decision
 
-The small test pushes a paid checkout and a ready avatar into the order decision. I like this because it's eval-driven: we assert fulfillment advances and the receipt appears.
+This focused test passes a paid checkout and a ready avatar into the order decision logic. We expect the fulfillment state to advance and the receipt to become available.
 
 ```bash
 pytest
 ```
 
-The service stops at returning receipt state and customer message. Saving and delivery live in your host e-commerce app, which is the right split for prod.
+The service stops right after returning the receipt state and the customer message. You handle persistence and actual delivery inside your host e-commerce app.
 
 ## Before this ships: Storefront Avatar Order Flow
 
-That's the minimal version. Before you run it for real, note the following for Storefront Avatar Order Flow.
+That covers the minimal version. Before you run this in production, note that the details below apply specifically to Storefront Avatar Order Flow.
 
 **Account & key**
 
